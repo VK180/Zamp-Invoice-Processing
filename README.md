@@ -1,110 +1,198 @@
-# Zamp AI Solutions Analyst Case Study — PS-1: Invoice Processing (PDF to Decision)
+# Autonomous Accounts Payable (AP) Invoice Processing Engine
 
-> **Submission for Zamp AI Solutions Analyst Placement Case Study (2026)**  
-> **Author:** PV Sai Subhash  
-> **Problem Statement:** PS-1 (Finance / AP) — *From PDF to Decision*  
-> **Stack:** Python 3.11 (FastAPI, PyPDF, ReportLab, Pydantic) + React (Vite, Tailwind CSS, Lucide Icons)
+An end-to-end automated invoice processing and 2-way matching engine that transforms unstructured vendor PDF invoices into auditable procurement decisions (`AUTO_APPROVED`, `REVIEW_REQUIRED`, `REJECTED`).
 
 ---
 
-## 1. Executive Summary: Why PS-1 & Why This Solution Gives an Unfair Edge
+## 1. Problem Overview
 
-Zamp operates at the intersection of AI and mission-critical financial automation (sales tax, compliance, and accounts payable). In enterprise finance, errors carry direct financial liability: overpaying a price variance, disbursing duplicate funds, or approving ghost vendors directly damages the P&L.
+Accounts Payable (AP) teams in mid-sized to enterprise organizations receive hundreds of vendor invoices each month—predominantly as email attachments in varying PDF formats. Human review is slow, prone to fatigue, and vulnerable to costly financial mistakes:
 
-### Why Choose PS-1?
-1. **Direct Cultural & Product Fit with Zamp:** Finance and AP workflows are Zamp's core domain. Solving PS-1 directly proves domain mastery and commercial readiness.
-2. **Objective Business ROI:** Unlike outreach copywriting (PS-3), AP automation has quantifiable financial metrics: duplicate fraud prevented ($ saved), percentage of zero-touch payments, and invoice processing cycle time reduced from days to under 200 milliseconds.
-3. **Deterministic Rigor Over Hallucination:** In finance, LLMs should be used for unstructured document parsing, but **never** for financial math. This system combines hybrid optical parsing with deterministic 2-way matching, tolerance boundaries, and an immutable audit trail.
+- **Layout & Format Diversity:** Clean digital PDFs, scanned/degraded images, varying table layouts, embedded vs. separated taxes, and explicit vs. implied PO references.
+- **Complex Procurement Logic:** Matching invoices against purchase orders requires enforcing contract unit rates, multi-line tolerances (e.g., $\pm 2.0\%$), split-PO partial shipments, and preventing duplicate disbursements.
+- **Unstructured to Structured Decisioning:** Systems must not only extract line items, but also authenticate the vendor, perform line-by-line reconciliation, check historical ledgers, and explain every decision with an immutable audit trail.
+
+This engine solves these challenges through a hybrid architecture combining LLM semantic parsing (Azure OpenAI GPT-4o / Google Gemini) with deterministic financial validation rules and a stateful ERP procurement database.
 
 ---
 
-## 2. End-to-End System Architecture
+## 2. Architecture & Ingestion Pipeline
 
-The pipeline processes vendor invoices through 6 distinct, observable telemetry stages:
+The pipeline processes invoices through 6 observable telemetry stages:
 
 ```
-+---------------------------------------------------------------------------------------------------+
-|                                 LIVE TELEMETRY PIPELINE (PS-1)                                   |
-+---------------------------------------------------------------------------------------------------+
-| [1. Ingestion]           -->  Accepts PDF uploads or 1-click synthetic invoices; streams bytes    |
-| [2. Extraction]          -->  Hybrid parser extracts invoice #, dates, vendor, lines, taxes, totals|
-| [3. Vendor Master Auth]  -->  Fuzzy alias lookup against ERP Master; validates Tax ID & Risk Tier |
-| [4. 2-Way Match]         -->  Reconciles item codes, unit rates, quantities, and split PO balances|
-| [5. Policy & Risk]       -->  Evaluates duplicate ledger, tolerance thresholds (+/-2%), dates     |
-| [6. Decision & Action]   -->  AUTO_APPROVED, REVIEW_REQUIRED, or REJECTED + NetSuite webhook payload|
-+---------------------------------------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   INVOICE PROCESSING PIPELINE                                   │
+└─────────────────────────────────────────────────────────────────────────────────────────────────┘
+  [Stage 1: Document Ingestion]
+     │── Ingests PDF streams via drag-and-drop upload or preloaded test scenarios
+     └── Extracts raw text streams, structural coordinates, and document metadata
+  [Stage 2: Financial Entity & Line Item Extraction]
+     │── Primary: Cloud LLM (Azure OpenAI GPT-4o / Google Gemini) for semantic schema extraction
+     └── Resilient Fallback: Autonomous Cognitive Parser (deterministic regex & layout heuristics)
+  [Stage 3: Vendor Master Authentication]
+     │── Authenticates legal vendor against ERP Vendor Master (tax IDs, payment terms, DBA aliases)
+     └── Blocks rogue / unapproved suppliers before financial evaluation
+  [Stage 4: Purchase Order 2-Way Reconciliation]
+     │── Reconciles invoice line items against active PO items, contract rates, and quantities
+     └── Handles partial shipments, remaining budget tracking, and contract rate tolerances
+  [Stage 5: Autonomous Policy Checks]
+     │── CHK-001: Vendor Master Registration
+     │── CHK-002: Historical Duplicate Invoice Detection
+     │── CHK-003: PO Authorization & Balance Availability
+     │── CHK-003-VEND: Cross-Vendor PO Misappropriation
+     │── CHK-004: Tolerance & Contract Pricing Boundaries
+     │── CHK-005: Mandatory Invoice Metadata Completeness
+     └── CHK-006: Document Structure & Line Item Fidelity
+  [Stage 6: Decision & Action Dispatch]
+     │── AUTO_APPROVED   ──> Generates ERP Webhook / ACH disbursement payload
+     │── REVIEW_REQUIRED ──> Flags variance, highlights lines in red, auto-drafts vendor inquiry email
+     └── REJECTED        ──> Halts payment, logs fraud/duplicate prevention in ERP ledger
 ```
 
 ---
 
-## 3. The 8 Built-In Test Scenarios & Edge Cases Matrix
+## 3. Supported Scenarios & Edge Cases
 
-As the prompt specifies: *"The edge cases you choose tell us how well you understand the problem."* This project provides 8 realistic test scenarios with pre-generated PDFs covering the core workflow and every real-world operational hazard:
+The system ships with 8 realistic, pre-generated invoice PDFs covering standard operations and real-world edge cases:
 
-| # | Scenario Title | File Name | Operational Challenge | Engine Behavior | Final Verdict |
-|---|---|---|---|---|---|
-| **0** | **Happy Path** | `1_Happy_Path_Apex_Exact_Match.pdf` | Clean annual software invoice matching PO-2026-101. | 100% 2-way match on lines & rates; approved vendor. | `AUTO_APPROVED` |
-| **1** | **Unit Price Inflation** | `2_Edge_Case_Price_Breach_CloudScale.pdf` | Compute rate increased from $1,200 to $1,400 (+16.7%). Invoice is +$800 over PO. | Breaches 2.0% ($30) tolerance limit. Highlights item in red; auto-drafts vendor dispute email. | `REVIEW_REQUIRED` |
-| **2** | **Split PO / Partial Delivery** | `3_Edge_Case_Split_PO_Partial_Freight.pdf` | Freight shipment 1 of 3 billed at $5,000 on a $15,000 master PO. | Recognizes valid partial fulfillment; decrements PO balance to $10,000 in ERP. | `AUTO_APPROVED` |
-| **3** | **Duplicate Fraud Prevention** | `4_Edge_Case_Duplicate_CyberGuard.pdf` | Resubmission of invoice INV-CG-9942 already settled via ACH. | Intercepts duplicate invoice # and amount; blocks double payment. | `REJECTED` |
-| **4** | **Rogue Spend & Missing PO** | `5_Edge_Case_Unapproved_Vendor_Missing_PO.pdf` | Invoice from unapproved foreign vendor with no PO reference. | Fails Vendor Master authentication; halts unbudgeted disbursement. | `REJECTED` |
-| **5** | **Tolerance Absorption** | `6_Edge_Case_Minor_Variance_Within_Tolerance.pdf` | $18.50 ground freight added to $3,250 hardware PO (+0.57%). | Within PO allowable tolerance (+/-2.0% / $25.00). Auto-approves with audit note. | `AUTO_APPROVED` |
-| **6** | **Cross-Vendor PO Hijacking** | `7_Edge_Case_Cross_Vendor_PO.pdf` | CloudScale attempts to bill against PO-2026-101 issued to Apex Software. | Detects cross-vendor PO misappropriation; blocks unauthorized drawdown. | `REJECTED` |
-| **7** | **Missing Invoice Number** | `8_Edge_Case_Missing_Invoice_Number.pdf` | Invoice document omits mandatory Invoice Number identifier. | Flags data completeness violation; halts ERP posting pending vendor re-issue. | `REVIEW_REQUIRED` |
+| Scenario | Sample Invoice | Operational Challenge | Engine Behavior | Verdict |
+| :--- | :--- | :--- | :--- | :---: |
+| **Happy Path** | `1_Happy_Path_Apex_Exact_Match.pdf` | Clean annual software invoice matching authorized PO-2026-101. | 100% exact 2-way match across line items, prices, and quantities. | `AUTO_APPROVED` |
+| **Price Breach** | `2_Edge_Case_Price_Breach_CloudScale.pdf` | Vendor increases compute rate from $1,200 to $1,400 (+16.7%), +$800 over PO. | Breaches allowable 2.0% ($30) tolerance limit; highlights variance in red and auto-drafts dispute email. | `REVIEW_REQUIRED` |
+| **Split PO Delivery** | `3_Edge_Case_Split_PO_Partial_Freight.pdf` | Freight shipment 1 of 3 billed at $5,000 against a $15,000 master contract. | Validates partial delivery; decrements PO balance to $10,000 in ERP ledger. | `AUTO_APPROVED` |
+| **Duplicate Prevention** | `4_Edge_Case_Duplicate_CyberGuard.pdf` | Resubmission of invoice #INV-CG-9942 already settled in prior accounting cycle. | Intercepts duplicate invoice # in ERP paid history; blocks duplicate disbursement. | `REJECTED` |
+| **Unapproved Vendor** | `5_Edge_Case_Unapproved_Vendor_Missing_PO.pdf` | Invoice from unapproved vendor with no PO reference. | Fails Vendor Master authentication; halts unbudgeted payment. | `REJECTED` |
+| **Within Tolerance** | `6_Edge_Case_Minor_Variance_Within_Tolerance.pdf` | $18.50 ground freight surcharge added to a $3,250 hardware order (+0.57%). | Evaluates within allowable tolerance threshold (+/-2.0% / $25.00); auto-approves with audit note. | `AUTO_APPROVED` |
+| **Cross-Vendor PO** | `7_Edge_Case_Cross_Vendor_PO.pdf` | CloudScale attempts to bill against PO-2026-101 legally issued to Apex Software. | Detects cross-vendor PO misappropriation; prevents unauthorized budget drawdown. | `REJECTED` |
+| **Missing Invoice #** | `8_Edge_Case_Missing_Invoice_Number.pdf` | Vendor document omits mandatory Invoice Number identifier. | Flags completeness violation; halts ERP posting pending vendor re-issue. | `REVIEW_REQUIRED` |
 
 ---
 
-## 4. Quickstart Guide (Running Locally)
+## 4. Key Capabilities
+
+- **Hybrid Extraction Architecture:** Supports live cloud LLMs (Azure OpenAI GPT-4o, Google Gemini) for semantic understanding, backed by an autonomous local parser that prevents pipeline downtime if external APIs are unreachable.
+- **Stateful ERP Database:** Built-in SQLite procurement database (`ap_procurement.db`) modeling active purchase orders, approved vendor registries, and historical payment ledgers.
+- **Human-In-The-Loop (HITL) Review:** Interactive review modal allowing AP specialists to inspect line-item discrepancies, enter audit justifications, and execute manual overrides.
+- **AP Analytics Dashboard:** Real-time visibility into auto-approval rates, total disbursed spend, prevented duplicate/fraud volume, and downloadable CSV audit logs.
+- **Embedded PDF Viewer:** Full visual preview of the original vendor PDF alongside extracted entities and reconciliation tables.
+
+---
+
+## 5. Technology Stack
+
+- **Backend:** Python 3.10+, FastAPI, Uvicorn, Pydantic v2
+- **Document Processing:** PyPDF (stream extraction), ReportLab (test generation)
+- **Database:** SQLite 3 (transactional, persistent)
+- **AI / LLM Integration:** Azure OpenAI (GPT-4o), Google Gemini Developer API
+- **Frontend:** React 18, Vite, Tailwind CSS, Lucide Icons
+
+---
+
+## 6. Project Structure
+
+```
+├── backend/
+│   ├── main.py                 # FastAPI application, routing, and pipeline orchestration
+│   ├── models.py               # Pydantic schemas (Invoice, LineItem, PO, Decision)
+│   ├── database.py             # SQLite manager, ERP tables, and historical ledger
+│   ├── extractor.py            # Optical & heuristic layout extractor
+│   ├── llm_engine.py           # Azure OpenAI / Gemini LLM integration with fallback
+│   ├── matching_engine.py      # 2-way PO line item reconciliation & policy checks
+│   ├── decision_engine.py      # Decision logic, rationale generation, and action dispatch
+│   ├── generator.py            # Synthetic PDF invoice generator for test scenarios
+│   └── sample_invoices/        # Pre-generated PDF test documents
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx             # Main layout, navigation, and state management
+│   │   ├── components/
+│   │   │   ├── LiveRunStudio.jsx   # Live pipeline stepper & reconciliation view
+│   │   │   ├── DashboardView.jsx   # AP metrics, run history, and CSV export
+│   │   │   ├── ErpExplorer.jsx     # ERP Master Explorer (POs, Vendors, Ledger)
+│   │   │   ├── ReviewModal.jsx     # Human-In-The-Loop specialist override modal
+│   │   │   └── AiConfigModal.jsx   # LLM provider & API key settings modal
+│   │   └── index.css           # Tailwind CSS styles
+│   └── dist/                   # Production-compiled React frontend
+├── run_app.py                  # Single-command launcher (backend + frontend)
+├── requirements.txt            # Python dependencies
+├── .env.example                # Environment variable configuration template
+└── README.md
+```
+
+---
+
+## 7. Quickstart Guide
 
 ### Prerequisites
-- Python 3.10+
-- Node.js 18+ (Node 20+ supported)
+- Python 3.10 or higher
+- Node.js 18+ (optional, only needed if rebuilding frontend assets)
 
-### 1-Click Launch (Recommended)
-Simply execute the launcher script in the workspace root:
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/VK180/Zamp-Invoice-Processing.git
+   cd Zamp-Invoice-Processing
+   ```
+
+2. **Install Python dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. **Configure Environment Variables:**
+   Copy `.env.example` to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
+
+   Configure your LLM provider credentials in `.env`:
+   ```env
+   # OpenAI / Azure OpenAI Configuration
+   LLM_PROVIDER=openai
+   OPENAI_API_KEY=your-api-key-here
+   OPENAI_BASE_URL=https://your-resource.openai.azure.com/openai/v1
+   LLM_MODEL=gpt-4o
+
+   # Or Google Gemini Configuration
+   # LLM_PROVIDER=gemini
+   # GEMINI_API_KEY=your-gemini-key-here
+   # LLM_MODEL=gemini-flash-lite-latest
+
+   # Policy Configuration
+   AP_TOLERANCE_PERCENTAGE=2.0
+   ```
+
+   *(Note: If no API key is provided, the system runs automatically using the Autonomous Cognitive Parser).*
+
+---
+
+### Running the Application
+
+Launch the unified server with a single command:
 
 ```bash
-# On Windows PowerShell:
 python run_app.py
-
-# Or run the batch file:
-./start.bat
 ```
 
-The script automatically:
-1. Generates all 6 realistic test invoice PDFs via ReportLab.
-2. Serves both the FastAPI backend and compiled React UI simultaneously on:
-   - **Live Web Interface:** `http://127.0.0.1:8000`
-   - **Interactive API Docs:** `http://127.0.0.1:8000/docs`
+The application will be live at:
+- **Web Application:** `http://127.0.0.1:8000`
+- **Interactive OpenAPI Documentation:** `http://127.0.0.1:8000/docs`
 
 ---
 
-## 5. Deliverable 2: 5-Minute Demo Video Script & Storyboard
+## 8. API Reference
 
-This script is structured second-by-second to record your Loom screen recording:
-
-* **[0:00 – 0:45] Context & Problem Statement**
-  * *Narration:* "Hi everyone! I’m presenting my solution for Zamp’s PS-1: Accounts Payable Invoice Intelligence. Mid-sized companies receive hundreds of PDF invoices monthly. Tired AP staff waste hours comparing numbers against purchase orders in spreadsheets, leading to expensive mistakes: overpaying price increases, duplicate disbursements, or paying unapproved vendors. Here is our live system."
-* **[0:45 – 1:45] Happy Path (Apex Software)**
-  * *Narration:* "Clicking the 'Happy Path' button: in real-time, the 6-stage telemetry stepper ingests the PDF, extracts the line items and metadata, authenticates the vendor in ERP Master, performs 2-way matching against PO-2026-101, validates tolerance and duplicate checks, and outputs an AUTO-APPROVED verdict with confidence 99%."
-  * *On Screen:* Point out the green verdict badge, line item reconciliation table, and the NetSuite ERP JSON payload.
-* **[1:45 – 2:45] Edge Case 1: Price Breach (CloudScale)**
-  * *Narration:* "What happens on a Friday afternoon when a vendor quietly hikes prices? I trigger CloudScale. The vendor billed compute at $1,400 instead of our contracted $1,200 (+16.7%), causing an $800 breach over our PO’s 2% tolerance limit. Notice the system doesn’t crash or blindly pay: it halts, flags REVIEW REQUIRED, highlights the line variance in red, and auto-generates a ready-to-send dispute email to the vendor."
-  * *On Screen:* Show the red 'Price Breach' tag in the line item table and switch to the 'Vendor Inquiry Draft' tab.
-* **[2:45 – 3:30] Edge Cases 2 & 3: Split POs & Duplicate Fraud**
-  * *Narration:* "Vendors frequently split POs across multiple shipments. Triggering Global Freight: $5,000 billed against a $15,000 master PO. The engine auto-approves and updates the remaining balance in ERP to $10,000. Next, CyberGuard: an invoice resubmitted after being paid last month. Our historical ledger catches it instantly, rejecting the $6,000 duplicate before double payment occurs."
-* **[3:30 – 4:45] Dashboard & Human-in-the-Loop Override**
-  * *Narration:* "Finally, switching to our AP Operations Dashboard: CFOs and controllers get real-time visibility into auto-approval rates, total spend disbursed, and fraud prevented. If an AP Specialist receives manager sign-off for that CloudScale price hike, they simply click 'Review', enter the audit authorization, and commit the override directly to ERP."
-
----
-
-## 6. Live Interview & Technical Defense FAQ
-
-### Q1: Why not let an LLM make the financial decision directly?
-> **Answer:** In enterprise finance, LLMs should be used for *unstructured perception* (extracting messy layouts and noisy OCR text), but **never** for financial math or disbursement decisions. Price calculations, duplicate checks, and tolerance bounds must be enforced by verified deterministic rules to eliminate hallucinations and ensure 100% audit compliance.
-
-### Q2: How does this scale to 50,000 invoices per month?
-> **Answer:** Ingestion and OCR parsing run as asynchronous worker tasks (e.g. Celery / AWS SQS). Rule evaluation runs in `<10ms` per invoice in memory. High-confidence happy paths (~70-80%) auto-disburse straight to ERP, while human AP analysts only touch the 20% exception queue.
-
-### Q3: How do you handle non-PO invoices (e.g. utilities, rent)?
-> **Answer:** In the fallback PO matching stage, if no PO reference is found, the system checks whether the vendor has a recurring non-PO spend authorization policy (e.g., standard monthly rent up to $10k). If yes, it routes to GL coding approval; if no, it flags for AP manager sign-off.
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/invoices/process` | Upload and process an invoice PDF document |
+| `POST` | `/api/invoices/process-sample` | Process one of the 8 pre-loaded scenario invoices |
+| `GET` | `/api/invoices/history` | Retrieve processing history and aggregate AP metrics |
+| `GET` | `/api/invoices/export/csv` | Download complete audit trail as CSV |
+| `POST` | `/api/invoices/{id}/review` | Submit human specialist review action / override |
+| `GET` | `/api/procurement/pos` | Retrieve active Purchase Orders and balances |
+| `GET` | `/api/procurement/vendors` | Retrieve Vendor Master directory |
+| `GET` | `/api/procurement/history-ledger`| Retrieve historical paid invoices ledger |
+| `POST` | `/api/reset` | Reset ERP balances and run history to baseline |
+| `GET` | `/api/llm/config` | Retrieve current LLM provider and status |
+| `POST` | `/api/llm/config` | Update LLM configuration dynamically |
