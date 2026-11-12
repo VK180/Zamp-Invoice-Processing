@@ -550,6 +550,15 @@ if os.path.exists(frontend_dist):
     def serve_frontend_index():
         return FileResponse(os.path.join(frontend_dist, "index.html"))
 
+    @app.get("/{full_path:path}")
+    def serve_spa_fallback(full_path: str):
+        if full_path.startswith("api") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            raise HTTPException(status_code=404, detail="API endpoint not found")
+        target_file = os.path.join(frontend_dist, full_path)
+        if os.path.exists(target_file) and os.path.isfile(target_file):
+            return FileResponse(target_file)
+        return FileResponse(os.path.join(frontend_dist, "index.html"))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
