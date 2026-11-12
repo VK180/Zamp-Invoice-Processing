@@ -150,7 +150,7 @@ class ReviewActionRequest(BaseModel):
     notes: str
     reviewer: str = "AP Specialist"
 
-@app.get("/api/health")
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat(), "service": "Zamp AP Decision Engine"}
 
@@ -546,7 +546,7 @@ if os.path.exists(frontend_dist):
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     def serve_frontend_index():
         return FileResponse(os.path.join(frontend_dist, "index.html"))
 
