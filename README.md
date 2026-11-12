@@ -2,6 +2,9 @@
 
 An end-to-end automated invoice processing and 2-way matching engine that transforms unstructured vendor PDF invoices into auditable procurement decisions (`AUTO_APPROVED`, `REVIEW_REQUIRED`, `REJECTED`).
 
+🚀 **Live Deployment:** [https://zamp-invoice-processing.onrender.com](https://zamp-invoice-processing.onrender.com)  
+📖 **Interactive API Documentation:** [https://zamp-invoice-processing.onrender.com/docs](https://zamp-invoice-processing.onrender.com/docs)
+
 ---
 
 ## 1. Problem Overview
@@ -176,7 +179,8 @@ python run_app.py
 ```
 
 The application will be live at:
-- **Web Application:** `http://127.0.0.1:8000`
+- **Live Cloud Deployment:** [https://zamp-invoice-processing.onrender.com](https://zamp-invoice-processing.onrender.com)
+- **Local Application:** `http://127.0.0.1:8000`
 - **Interactive OpenAPI Documentation:** `http://127.0.0.1:8000/docs`
 
 ---
